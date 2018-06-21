@@ -328,7 +328,8 @@ class DendrogramViewer(object):
 
     def remove_all_contours(self):
         """ Remove all selected contours. """
-        for key in self.selected_contour.keys():
+        current_contours = list(self.selected_contour.keys())
+        for key in current_contours:
             self.remove_contour(key)
 
     def update_contours(self):
