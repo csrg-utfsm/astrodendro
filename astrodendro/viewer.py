@@ -3,7 +3,16 @@
 from collections import defaultdict
 import warnings
 
+
 import numpy as np
+import ipywidgets as widgets
+
+from IPython.display import display
+from ipywidgets import VBox, HBox, FloatRangeSlider, HTML, Layout
+
+import matplotlib.pyplot as plt
+from matplotlib.widgets import Slider
+
 from .plot import DendrogramPlotter
 
 class SelectionHub(object):
@@ -55,10 +64,9 @@ class SelectionHub(object):
             cb(id)
 
 
-class BasicDendrogramViewer(object):
+class DendrogramViewer(object):
 
     def __init__(self, dendrogram):
-
         if dendrogram.data.ndim not in [2, 3]:
             raise ValueError(
                 "Only 2- and 3-dimensional arrays are supported at this time")
@@ -77,113 +85,21 @@ class BasicDendrogramViewer(object):
         # Define the currently selected subtree
         self.selected_lines = {}
         self.selected_contour = {}
-        # The keys in these dictionaries are event button IDs.        
+        self.selected_label = {}
+        # The keys in these dictionaries are event button IDs.
 
+        self._initiate_plot()
 
+    def _initiate_plot(self):
         # Initiate plot
-        import matplotlib.pyplot as plt
-        self.fig = plt.figure(figsize=(14, 8))
+        self.fig = plt.figure(figsize=(5, 4))
 
-        ax_image_limits = [0.1, 0.1, 0.4, 0.7]
-
-        try:
-            from wcsaxes import WCSAxes
-            __wcaxes_imported = True
-        except ImportError:
-            __wcaxes_imported = False
-            if self.dendrogram.wcs is not None:
-                warnings.warn("`WCSAxes` package required for wcs coordinate display.")
-
-
-        if self.dendrogram.wcs is not None and __wcaxes_imported:
-
-            if self.array.ndim == 2:
-                slices = ('x', 'y')
-            else:
-                slices = ('x', 'y', 1)
-
-            ax_image = WCSAxes(self.fig, ax_image_limits, wcs=self.dendrogram.wcs, slices=slices)
-            self.ax_image = self.fig.add_axes(ax_image)
-
-        else:
-            self.ax_image = self.fig.add_axes(ax_image_limits)            
-
-        from matplotlib.widgets import Slider
-
-        self._clim = (np.min(self.array[~np.isnan(self.array) & ~np.isinf(self.array)]),
-                      np.max(self.array[~np.isnan(self.array) & ~np.isinf(self.array)]))
-
-        if self.array.ndim == 2:
-
-            self.slice = None
-            self.image = self.ax_image.imshow(self.array, origin='lower', interpolation='nearest', vmin=self._clim[0], vmax=self._clim[1], cmap=plt.cm.gray)
-
-            self.slice_slider = None
-
-        else:
-
-            if self.array.shape[0] > 1:
-
-                self.slice = int(round(self.array.shape[0] / 2.))
-
-                self.slice_slider_ax = self.fig.add_axes([0.1, 0.95, 0.4, 0.03])
-                self.slice_slider_ax.set_xticklabels("")
-                self.slice_slider_ax.set_yticklabels("")
-                self.slice_slider = Slider(self.slice_slider_ax, "3-d slice", 0, self.array.shape[0], valinit=self.slice, valfmt="%i")
-                self.slice_slider.on_changed(self.update_slice)
-                self.slice_slider.drawon = False
-
-            else:
-
-                self.slice = 0
-                self.slice_slider = None
-
-            self.image = self.ax_image.imshow(self.array[self.slice, :,:], origin='lower', interpolation='nearest', vmin=self._clim[0], vmax=self._clim[1], cmap=plt.cm.gray)
-
-        self.vmin_slider_ax = self.fig.add_axes([0.1, 0.90, 0.4, 0.03])
-        self.vmin_slider_ax.set_xticklabels("")
-        self.vmin_slider_ax.set_yticklabels("")
-        self.vmin_slider = Slider(self.vmin_slider_ax, "vmin", self._clim[0], self._clim[1], valinit=self._clim[0])
-        self.vmin_slider.on_changed(self.update_vmin)
-        self.vmin_slider.drawon = False
-
-        self.vmax_slider_ax = self.fig.add_axes([0.1, 0.85, 0.4, 0.03])
-        self.vmax_slider_ax.set_xticklabels("")
-        self.vmax_slider_ax.set_yticklabels("")
-        self.vmax_slider = Slider(self.vmax_slider_ax, "vmax", self._clim[0], self._clim[1], valinit=self._clim[1])
-        self.vmax_slider.on_changed(self.update_vmax)
-        self.vmax_slider.drawon = False
-
-        self.ax_dendrogram = self.fig.add_axes([0.6, 0.3, 0.35, 0.4])
-        self.ax_dendrogram.add_collection(self.lines)
-
-        self.selected_label = {} # map selection IDs -> text objects
-        self.selected_label[1] = self.fig.text(0.6, 0.85, "No structure selected", fontsize=18, 
-            color=self.hub.colors[1])
-        self.selected_label[2] = self.fig.text(0.6, 0.8, "No structure selected", fontsize=18,
-            color=self.hub.colors[2])
-        self.selected_label[3] = self.fig.text(0.6, 0.75, "No structure selected", fontsize=18,
-            color=self.hub.colors[3])
-        x = [p.vertices[:, 0] for p in self.lines.get_paths()]
-        y = [p.vertices[:, 1] for p in self.lines.get_paths()]
-        xmin = np.min(x)
-        xmax = np.max(x)
-        ymin = np.min(y)
-        ymax = np.max(y)
-        self.lines.set_picker(2.)
-        self.lines.set_zorder(0)
-        dx = xmax - xmin
-        self.ax_dendrogram.set_xlim(xmin - dx * 0.1, xmax + dx * 0.1)
-        self.ax_dendrogram.set_ylim(ymin * 0.5, ymax * 2.0)
-        self.ax_dendrogram.set_yscale('log')
-
-        self.fig.canvas.mpl_connect('pick_event', self.line_picker)
-        self.fig.canvas.mpl_connect('button_press_event', self.select_from_map)
-
+        self.ax_image, self.ax_dendrogram = self._get_axes()
+        self._initiate_image()
+        self._initiate_dendrogram()
 
     def show(self):
-        import matplotlib.pyplot as plt
-        plt.show()
+        plt.show(self.fig.number)
 
     def update_slice(self, pos=None):
         if self.array.ndim == 2:
@@ -195,6 +111,91 @@ class BasicDendrogramViewer(object):
         self.update_contours()
 
         self.fig.canvas.draw()
+
+    def _initiate_vwidgets(self):
+        raise NotImplementedError("Trying to call abstract class method")
+            
+    def _initiate_labels(self):
+        raise NotImplementedError("Trying to call abstract class method")
+    
+    def _set_label_text(self, selection_id, text):
+        raise NotImplementedError("Trying to call abstract class method")
+
+    def _get_axes_limits(self):
+        raise NotImplementedError("Trying to call abstract class method")
+
+    def _get_axes(self):
+        ax_image_limits, ax_dendrogram_limits = self._get_axes_limits()
+        try:
+            from wcsaxes import WCSAxes
+            __wcaxes_imported = True
+        except ImportError:
+            __wcaxes_imported = False
+            if self.dendrogram.wcs is not None:
+                warnings.warn("`WCSAxes` package required for wcs coordinate display.")
+
+        if self.dendrogram.wcs is not None and __wcaxes_imported:
+            slices = ('x', 'y') if self.array.ndim == 2 else ('x', 'y', 1)
+            ax_image = WCSAxes(self.fig, ax_image_limits, wcs=self.dendrogram.wcs, slices=slices)
+            ax_image = self.fig.add_axes(ax_image)
+        else:
+            ax_image = self.fig.add_axes(ax_image_limits)            
+
+        ax_dendrogram = self.fig.add_axes(ax_dendrogram_limits)
+        return ax_image, ax_dendrogram
+
+    def _initiate_image(self):
+        self._clim = (np.min(self.array[~np.isnan(self.array) & ~np.isinf(self.array)]),
+                      np.max(self.array[~np.isnan(self.array) & ~np.isinf(self.array)]))
+
+        if self.array.ndim == 2:
+            self.slice = None
+            self.image = self.ax_image.imshow(self.array, origin='lower', interpolation='nearest', vmin=self._clim[0], vmax=self._clim[1], cmap=plt.cm.gray)
+            self.slice_slider = None
+        else:
+            if self.array.shape[0] > 1:
+                self.slice = int(round(self.array.shape[0] / 2.))
+
+                self.slice_slider_ax = self.fig.add_axes([0.1, 0.95, 0.4, 0.03])
+                self.slice_slider_ax.set_xticklabels("")
+                self.slice_slider_ax.set_yticklabels("")
+                self.slice_slider = Slider(self.slice_slider_ax, "3-d slice", 0, self.array.shape[0], valinit=self.slice, valfmt="%i")
+                self.slice_slider.on_changed(self.update_slice)
+                self.slice_slider.drawon = False
+            else:
+                self.slice = 0
+                self.slice_slider = None
+
+            self.image = self.ax_image.imshow(self.array[self.slice, :,:], origin='lower', interpolation='nearest', vmin=self._clim[0], vmax=self._clim[1], cmap=plt.cm.gray)
+
+        self._initiate_vwidgets()
+
+    def _initiate_dendrogram(self):
+        self.ax_dendrogram.add_collection(self.lines)
+        
+        self._initiate_labels()
+
+        self.lines.set_picker(2.)
+        self.lines.set_zorder(0)
+
+        x = [p.vertices[:, 0] for p in self.lines.get_paths()]
+        y = [p.vertices[:, 1] for p in self.lines.get_paths()]
+
+        xmin = np.min(x)
+        xmax = np.max(x)
+
+        ymin = np.min(y)
+        ymax = np.max(y)
+
+        dx = xmax - xmin
+        
+        self.ax_dendrogram.set_xlim(xmin - dx * 0.1, xmax + dx * 0.1)
+        self.ax_dendrogram.set_ylim(ymin * 0.5, ymax * 2.0)
+        
+        self.ax_dendrogram.set_yscale('log')
+
+        self.fig.canvas.mpl_connect('pick_event', self.line_picker)
+        self.fig.canvas.mpl_connect('button_press_event', self.select_from_map)    
 
     def _connect_to_hub(self):
         self.hub.add_callback(self._on_selection_change)
@@ -292,7 +293,7 @@ class BasicDendrogramViewer(object):
             del self.selected_lines[selection_id]
 
         if structure is None:
-            self.selected_label[selection_id].set_text("No structure selected")
+            self._set_label_text(selection_id, "No structure selected")
             self.remove_contour(selection_id)
             self.fig.canvas.draw()
             return
@@ -306,7 +307,7 @@ class BasicDendrogramViewer(object):
         else:
             label_text = "Selected structures: {0}...".format(', '.join([str(structure.idx) for structure in structures[:3]]))
 
-        self.selected_label[selection_id].set_text(label_text)
+        self._set_label_text(selection_id, label_text)
 
         # Get collection for this substructure
         self.selected_lines[selection_id] = self.plotter.get_lines(
@@ -350,3 +351,84 @@ class BasicDendrogramViewer(object):
             self.selected_contour[selection_id] = self.ax_image.contour(
                 mask, colors=self.hub.colors[selection_id],
                 linewidths=2, levels=[0.5], alpha=0.75, zorder=struct.height)
+
+
+class WindowDendrogramViewer(DendrogramViewer):
+    def _initiate_vwidgets(self):
+        self.vmin_slider_ax = self.fig.add_axes([0.1, 0.90, 0.4, 0.03])
+        self.vmin_slider_ax.set_xticklabels("")
+        self.vmin_slider_ax.set_yticklabels("")
+
+        self.vmax_slider_ax = self.fig.add_axes([0.1, 0.85, 0.4, 0.03])
+        self.vmax_slider_ax.set_xticklabels("")
+        self.vmax_slider_ax.set_yticklabels("")
+
+        self.vmin_slider = Slider(self.vmin_slider_ax, "vmin", self._clim[0], self._clim[1], valinit=self._clim[0])
+        self.vmin_slider.on_changed(self.update_vmin)
+        self.vmin_slider.drawon = False
+
+        self.vmax_slider = Slider(self.vmax_slider_ax, "vmax", self._clim[0], self._clim[1], valinit=self._clim[1])
+        self.vmax_slider.on_changed(self.update_vmax)
+        self.vmax_slider.drawon = False
+    
+    def _initiate_labels(self):
+        self.selected_label = {} # map selection IDs -> text objects
+        self.selected_label[1] = self.fig.text(0.6, 0.85, "No structure selected", fontsize=18, 
+            color=self.hub.colors[1])
+        self.selected_label[2] = self.fig.text(0.6, 0.8, "No structure selected", fontsize=18,
+            color=self.hub.colors[2])
+        self.selected_label[3] = self.fig.text(0.6, 0.75, "No structure selected", fontsize=18,
+            color=self.hub.colors[3])
+    
+    def _set_label_text(self, selection_id, text):
+        self.selected_label[selection_id].set_text("No structure selected")
+    
+    def _get_axes_limits(self):
+        ax_image_limits = [0.1, 0.1, 0.4, 0.7]
+        ax_dendrogram_limits = [0.6, 0.3, 0.35, 0.4]
+        return ax_image_limits, ax_dendrogram_limits
+
+
+class JupyterDendrogramViewer(DendrogramViewer):
+    def _initiate_vwidgets(self):
+        self.v_slider = FloatRangeSlider(description="v range", min=self._clim[0], max=self._clim[1], value=(self._clim[0], self._clim[1]),
+            orientation='vertical', continuous_update=False)
+
+        def _change(change):
+            if change['new'][0] != change['old'][0]:
+                self.update_vmin(change['new'][0])
+            if change['new'][1] != change['old'][1]:
+                self.update_vmax(change['new'][1])
+
+        self.v_slider.observe(_change, names='value')
+        self.v_slider.observe(_change, names='value')
+    
+    def _initiate_labels(self):
+        self.selected_colors = {}
+        self.selected_colors[1] = 'red'
+        self.selected_colors[2] = 'blue'
+        self.selected_colors[3] = 'green'
+
+        for i in range(1, 4):
+            self.selected_label[i] = HTML(value="")
+            self._set_label_text(i, "No structure selected")
+    
+    def _set_label_text(self, selection_id, text):
+        lo = '<span style="color:{}">{}</span>'
+        self.selected_label[selection_id].value = lo.format(self.selected_colors[selection_id], text)
+
+    def _get_axes_limits(self):
+        ax_image_limits = [0.1, 0.1, 0.35, 0.9]
+        ax_dendrogram_limits = [0.6, 0.35, 0.35, 0.4]
+        return ax_image_limits, ax_dendrogram_limits
+
+    def _get_dashboard(self):
+        struct_layout = Layout(display='flex', flex_flow='column', align_content="center")
+        structures = VBox(list(self.selected_label.values()), layout=struct_layout)
+        
+        return HBox([self.v_slider, structures])
+
+    def show(self):
+        display(self._get_dashboard())
+        self.fig.show()
+        

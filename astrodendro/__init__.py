@@ -4,6 +4,6 @@ from .dendrogram import Dendrogram, periodic_neighbours
 from .structure import Structure
 from .analysis import ppv_catalog, pp_catalog
 from .plot import DendrogramPlotter
-from .viewer import BasicDendrogramViewer
+from .viewer import WindowDendrogramViewer, JupyterDendrogramViewer
 
 __version__ = '0.3.0.dev'

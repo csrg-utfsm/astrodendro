@@ -501,14 +501,29 @@ class Dendrogram(object):
         from .plot import DendrogramPlotter
         return DendrogramPlotter(self)
 
-    def viewer(self):
+    def viewer(self, ipython_mode=None):
         """
         Launch an interactive viewer to explore the dendrogram.
 
         This functionality is only available for 2- or 3-d datasets.
         """
-        from .viewer import BasicDendrogramViewer
-        return BasicDendrogramViewer(self)
+        try:
+            get_ipython()
+            using_ipython = True
+        except NameError:
+            using_ipython = False
+
+        if not using_ipython:
+            ipython_mode = False
+        elif ipython_mode is None:
+            ipython_mode = True
+            
+        if ipython_mode:
+            from .viewer import JupyterDendrogramViewer
+            return JupyterDendrogramViewer(self)
+        else:
+            from .viewer import WindowDendrogramViewer
+            return WindowDendrogramViewer(self)
 
     def prune(self, min_delta=0, min_npix=0, is_independent=None):
         '''
